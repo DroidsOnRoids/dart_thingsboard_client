@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:thingsboard_client/thingsboard_client.dart';
 import 'package:test/test.dart';
 
@@ -6,7 +7,7 @@ void main() {
     ThingsboardClient? tbClient;
 
     setUp(() async {
-      tbClient = ThingsboardClient('http://localhost:8080');
+      tbClient = ThingsboardClient('http://localhost:8080', Dio());
       await tbClient!.init();
     });
 

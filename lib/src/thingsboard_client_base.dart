@@ -10,8 +10,7 @@ import 'service/service.dart';
 import 'storage/storage.dart';
 
 typedef TbComputeCallback<Q, R> = FutureOr<R> Function(Q message);
-typedef TbCompute = Future<R> Function<Q, R>(
-    TbComputeCallback<Q, R> callback, Q message);
+typedef TbCompute = Future<R> Function<Q, R>(TbComputeCallback<Q, R> callback, Q message);
 
 typedef UserLoadedCallback = void Function();
 typedef LoadStartedCallback = void Function();
@@ -19,8 +18,7 @@ typedef LoadFinishedCallback = void Function();
 typedef MfaAuthCallback = void Function();
 typedef ErrorCallback = void Function(ThingsboardError error);
 
-TbCompute syncCompute = <Q, R>(TbComputeCallback<Q, R> callback, Q message) =>
-    Future.value(callback(message));
+TbCompute syncCompute = <Q, R>(TbComputeCallback<Q, R> callback, Q message) => Future.value(callback(message));
 
 class ThingsboardClient {
   final String _apiEndpoint;
@@ -65,7 +63,7 @@ class ThingsboardClient {
   EntitiesVersionControlService? _entitiesVersionControlService;
   TwoFactorAuthService? _twoFactorAuthService;
 
-  factory ThingsboardClient(String apiEndpoint,
+  factory ThingsboardClient(String apiEndpoint, Dio dio,
       {TbStorage? storage,
       UserLoadedCallback? onUserLoaded,
       MfaAuthCallback? onMfaAuth,
@@ -73,21 +71,12 @@ class ThingsboardClient {
       LoadStartedCallback? onLoadStarted,
       LoadFinishedCallback? onLoadFinished,
       TbCompute? computeFunc}) {
-    var dio = Dio();
     dio.options.baseUrl = apiEndpoint;
-    final tbClient = ThingsboardClient._internal(
-        apiEndpoint,
-        dio,
-        storage,
-        onUserLoaded,
-        onMfaAuth,
-        onError,
-        onLoadStarted,
-        onLoadFinished,
-        computeFunc ?? syncCompute);
+    final tbClient = ThingsboardClient._internal(apiEndpoint, dio, storage, onUserLoaded, onMfaAuth, onError,
+        onLoadStarted, onLoadFinished, computeFunc ?? syncCompute);
     dio.interceptors.clear();
-    dio.interceptors.add(HttpInterceptor(dio, tbClient, tbClient._loadStarted,
-        tbClient._loadFinished, tbClient._onError));
+    dio.interceptors
+        .add(HttpInterceptor(dio, tbClient, tbClient._loadStarted, tbClient._loadFinished, tbClient._onError));
     return tbClient;
   }
 
@@ -107,8 +96,7 @@ class ThingsboardClient {
     await _setUserFromJwtToken(null, null, true);
   }
 
-  Future<void> _setUserFromJwtToken(
-      String? jwtToken, String? refreshToken, bool? notify) async {
+  Future<void> _setUserFromJwtToken(String? jwtToken, String? refreshToken, bool? notify) async {
     if (jwtToken == null) {
       _token = null;
       _refreshToken = null;
@@ -135,23 +123,20 @@ class ThingsboardClient {
   Future<void> _checkPlatformVersion() async {
     var version = 'unknown';
     var response = await get<Map<String, dynamic>>('/api/system/info',
-        options:
-            defaultHttpOptionsFromConfig(RequestConfig(ignoreLoading: true)));
+        options: defaultHttpOptionsFromConfig(RequestConfig(ignoreLoading: true)));
     if (response.data != null) {
       version = response.data!['version'];
     }
     bool supported = false;
     try {
       _platformVersion = PlatformVersion.fromString(version);
-      supported =
-          PlatformVersionMatcher.isSupportedPlatformVersion(_platformVersion!);
+      supported = PlatformVersionMatcher.isSupportedPlatformVersion(_platformVersion!);
     } catch (e) {
       supported = false;
     }
     if (!supported) {
       throw ThingsboardError(
-          message: 'Unsupported ThingsBoard platform version: $version',
-          errorCode: ThingsBoardErrorCode.general);
+          message: 'Unsupported ThingsBoard platform version: $version', errorCode: ThingsBoardErrorCode.general);
     }
   }
 
@@ -266,10 +251,7 @@ class ThingsboardClient {
   }) async {
     try {
       return await _dio.delete(path,
-          data: data,
-          queryParameters: queryParameters,
-          options: options,
-          cancelToken: cancelToken);
+          data: data, queryParameters: queryParameters, options: options, cancelToken: cancelToken);
     } catch (e) {
       throw toThingsboardError(e);
     }
@@ -279,76 +261,55 @@ class ThingsboardClient {
     return _computeFunc!(callback, message);
   }
 
-  Future<LoginResponse> login(LoginRequest loginRequest,
-      {RequestConfig? requestConfig}) async {
+  Future<LoginResponse> login(LoginRequest loginRequest, {RequestConfig? requestConfig}) async {
     var response = await post('/api/auth/login',
-        data: jsonEncode(loginRequest),
-        options: defaultHttpOptionsFromConfig(requestConfig));
+        data: jsonEncode(loginRequest), options: defaultHttpOptionsFromConfig(requestConfig));
     var loginResponse = LoginResponse.fromJson(response.data);
-    await _setUserFromJwtToken(
-        loginResponse.token, loginResponse.refreshToken, true);
+    await _setUserFromJwtToken(loginResponse.token, loginResponse.refreshToken, true);
     if (Authority.PRE_VERIFICATION_TOKEN == loginResponse.scope) {
       _mfaAuth();
     }
     return loginResponse;
   }
 
-  Future<LoginResponse> checkTwoFaVerificationCode(
-      TwoFaProviderType providerType, String verificationCode,
+  Future<LoginResponse> checkTwoFaVerificationCode(TwoFaProviderType providerType, String verificationCode,
       {RequestConfig? requestConfig}) async {
     var response = await post('/api/auth/2fa/verification/check',
-        queryParameters: {
-          'providerType': providerType.toShortString(),
-          'verificationCode': verificationCode
-        },
+        queryParameters: {'providerType': providerType.toShortString(), 'verificationCode': verificationCode},
         options: defaultHttpOptionsFromConfig(requestConfig));
     var loginResponse = LoginResponse.fromJson(response.data);
-    await _setUserFromJwtToken(
-        loginResponse.token, loginResponse.refreshToken, true);
+    await _setUserFromJwtToken(loginResponse.token, loginResponse.refreshToken, true);
     return loginResponse;
   }
 
-  Future<void> setUserFromJwtToken(
-      String? jwtToken, String? refreshToken, bool? notify) async {
+  Future<void> setUserFromJwtToken(String? jwtToken, String? refreshToken, bool? notify) async {
     await _setUserFromJwtToken(jwtToken, refreshToken, notify);
   }
 
   Future<void> logout({RequestConfig? requestConfig}) async {
     try {
-      await post('/api/auth/logout',
-          options: defaultHttpOptionsFromConfig(requestConfig));
+      await post('/api/auth/logout', options: defaultHttpOptionsFromConfig(requestConfig));
       await _clearJwtToken();
     } catch (e) {
       await _clearJwtToken();
     }
   }
 
-  Future<void> sendResetPasswordLink(String email,
-      {RequestConfig? requestConfig}) async {
+  Future<void> sendResetPasswordLink(String email, {RequestConfig? requestConfig}) async {
     await post('/api/noauth/resetPasswordByEmail',
-        data: {'email': email},
-        options: defaultHttpOptionsFromConfig(requestConfig));
+        data: {'email': email}, options: defaultHttpOptionsFromConfig(requestConfig));
   }
 
-  Future<void> changePassword(String currentPassword, String newPassword,
-      {RequestConfig? requestConfig}) async {
-    var changePasswordRequest = {
-      'currentPassword': currentPassword,
-      'newPassword': newPassword
-    };
+  Future<void> changePassword(String currentPassword, String newPassword, {RequestConfig? requestConfig}) async {
+    var changePasswordRequest = {'currentPassword': currentPassword, 'newPassword': newPassword};
     var response = await post('/api/auth/changePassword',
-        data: jsonEncode(changePasswordRequest),
-        options: defaultHttpOptionsFromConfig(requestConfig));
+        data: jsonEncode(changePasswordRequest), options: defaultHttpOptionsFromConfig(requestConfig));
     var loginResponse = LoginResponse.fromJson(response.data);
-    await _setUserFromJwtToken(
-        loginResponse.token, loginResponse.refreshToken, false);
+    await _setUserFromJwtToken(loginResponse.token, loginResponse.refreshToken, false);
   }
 
   Future<void> refreshJwtToken(
-      {String? refreshToken,
-      bool? notify,
-      Dio? internalDio,
-      bool interceptRefreshToken = false}) async {
+      {String? refreshToken, bool? notify, Dio? internalDio, bool interceptRefreshToken = false}) async {
     _refreshTokenPending = true;
     try {
       refreshToken ??= _refreshToken;
@@ -356,11 +317,9 @@ class ThingsboardClient {
         var refreshTokenRequest = RefreshTokenRequest(refreshToken!);
         try {
           var targetDio = internalDio ?? _dio;
-          var response = await targetDio.post('/api/auth/token',
-              data: jsonEncode(refreshTokenRequest));
+          var response = await targetDio.post('/api/auth/token', data: jsonEncode(refreshTokenRequest));
           var loginResponse = LoginResponse.fromJson(response.data);
-          await _setUserFromJwtToken(
-              loginResponse.token, loginResponse.refreshToken, notify);
+          await _setUserFromJwtToken(loginResponse.token, loginResponse.refreshToken, notify);
         } catch (e) {
           await _clearJwtToken();
           rethrow;
@@ -368,9 +327,7 @@ class ThingsboardClient {
       } else {
         await _clearJwtToken();
         if (interceptRefreshToken) {
-          throw ThingsboardError(
-              message: 'Session expired!',
-              errorCode: ThingsBoardErrorCode.jwtTokenExpired);
+          throw ThingsboardError(message: 'Session expired!', errorCode: ThingsBoardErrorCode.jwtTokenExpired);
         }
       }
     } finally {
@@ -533,8 +490,7 @@ class ThingsboardClient {
   }
 
   TelemetryService getTelemetryService() {
-    _telemetryWebsocketService ??=
-        TelemetryWebsocketService(this, _apiEndpoint);
+    _telemetryWebsocketService ??= TelemetryWebsocketService(this, _apiEndpoint);
     return _telemetryWebsocketService!;
   }
 
